@@ -1,0 +1,20 @@
+name = "mailroom-agent"
+main = "src/index.js"
+compatibility_date = "2025-09-01"
+
+[ai]
+binding = "AI"
+
+[[durable_objects.bindings]]
+name = "STORE"
+class_name = "Store"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Store"]
+
+[vars]
+MODEL = "@cf/meta/llama-3.1-8b-instruct-fast"
+
+[observability]
+enabled = true
