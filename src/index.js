@@ -287,30 +287,51 @@ function b64bytes(s) {
 // !!! ASSUMPTION: the exact signed bytes come from the spec section "How to verify a receipt signature".
 // Every candidate below binds evaluation/proposal/call/accepted/receiptId, so a flipped `accepted`
 // or a receipt for another proposal can never verify. Replace this list with the one documented format.
-function receiptMessages(evalId, inputDigest, r) {
-  const base = { accepted: r.accepted, action: r.action, callId: r.callId, dossierId: r.dossierId, evaluationId: evalId, proposalDigest: r.proposalDigest, receiptId: r.receiptId };
-  const acc = r.accepted ? 'true' : 'false';
-  const parts = [evalId, r.dossierId, r.callId, r.action, r.proposalDigest, acc, r.receiptId];
-  const short = [evalId, r.callId, r.proposalDigest, acc, r.receiptId];
-  return [
-    canon(base),
-    canon({ ...base, inputDigest }),
-    canon({ accepted: r.accepted, action: r.action, callId: r.callId, dossierId: r.dossierId, proposalDigest: r.proposalDigest, receiptId: r.receiptId }),
-    ...['|', ':', '\n'].flatMap((sep) => [parts.join(sep), short.join(sep)]),
-  ];
+// function receiptMessages(evalId, inputDigest, r) {
+//   const base = { accepted: r.accepted, action: r.action, callId: r.callId, dossierId: r.dossierId, evaluationId: evalId, proposalDigest: r.proposalDigest, receiptId: r.receiptId };
+//   const acc = r.accepted ? 'true' : 'false';
+//   const parts = [evalId, r.dossierId, r.callId, r.action, r.proposalDigest, acc, r.receiptId];
+//   const short = [evalId, r.callId, r.proposalDigest, acc, r.receiptId];
+//   return [
+//     canon(base),
+//     canon({ ...base, inputDigest }),
+//     canon({ accepted: r.accepted, action: r.action, callId: r.callId, dossierId: r.dossierId, proposalDigest: r.proposalDigest, receiptId: r.receiptId }),
+//     ...['|', ':', '\n'].flatMap((sep) => [parts.join(sep), short.join(sep)]),
+//   ];
+// }
+
+// async function verifyReceipt(k, evalId, inputDigest, r) {
+//   const sig = b64bytes(r.receiptSignature);
+//   if (!sig || sig.length !== 64) return false;
+//   for (const m of receiptMessages(evalId, inputDigest, r)) {
+//     try { if (await crypto.subtle.verify(k.algo, k.key, sig, enc.encode(m))) return true; } catch {}
+//   }
+//   return false;
+// }
+
+function receiptMessage(evalId, inputDigest, r) {
+  const { receiptSignature, ...receipt } = r;
+  return canon({
+    profile: PROFILE,
+    evaluationId: evalId,
+    inputDigest,
+    receipt: {
+      dossierId: receipt.dossierId, callId: receipt.callId, action: receipt.action,
+      accepted: receipt.accepted, proposalDigest: receipt.proposalDigest, receiptId: receipt.receiptId,
+    },
+  });
 }
 
 async function verifyReceipt(k, evalId, inputDigest, r) {
   const sig = b64bytes(r.receiptSignature);
   if (!sig || sig.length !== 64) return false;
-  for (const m of receiptMessages(evalId, inputDigest, r)) {
-    try { if (await crypto.subtle.verify(k.algo, k.key, sig, enc.encode(m))) return true; } catch {}
-  }
-  return false;
+  try { return await crypto.subtle.verify(k.algo, k.key, sig, enc.encode(receiptMessage(evalId, inputDigest, r))); }
+  catch { return false; }
 }
 
 /* ---------- safe proposal builders (the model never writes targets/payloads) ---------- */
-const SAFE_RE = /^[A-Za-z0-9@._:\/+#, -]{1,80}$/;
+// const SAFE_RE = /^[A-Za-z0-9@._:\/+#, -]{1,80}$/;
+const SAFE_RE = /^[^\r\n]{1,200}$/;
 const BAD_RE = /canary|vault|secret|password|api[_ -]?key|ignore (all|previous|prior)|system prompt/i;
 const UNTRUSTED_RE = /untrusted|external|inbound|attachment|customer|unverified|third.?party|forward/i;
 

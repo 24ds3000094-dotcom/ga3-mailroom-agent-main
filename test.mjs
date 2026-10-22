@@ -46,7 +46,9 @@ const KEYS = {
   quarantine_item: ['payload:artifactId,reasonCode', 'security_queue'],
   no_action: ['payload:reasonCode,referenceId', null],
 };
-const signMsg = (evalId, r) => canon({ accepted: r.accepted, action: r.action, callId: r.callId, dossierId: r.dossierId, evaluationId: evalId, proposalDigest: r.proposalDigest, receiptId: r.receiptId });
+// const signMsg = (evalId, r) => canon({ accepted: r.accepted, action: r.action, callId: r.callId, dossierId: r.dossierId, evaluationId: evalId, proposalDigest: r.proposalDigest, receiptId: r.receiptId });
+const signMsg = (evalId, r, inputDigest) => canon({ profile: PROFILE, evaluationId: evalId, inputDigest,
+  receipt: { dossierId: r.dossierId, callId: r.callId, action: r.action, accepted: r.accepted, proposalDigest: r.proposalDigest, receiptId: r.receiptId } });
 const receiptsFor = (evalId, proposals, acceptFirst = true) => proposals.map((p, i) => {
   const r = { dossierId: p.dossierId, callId: p.callId, action: p.action, accepted: i === 0 ? acceptFirst : false,
     proposalDigest: sha(canon({ dossierId: p.dossierId, callId: p.callId, action: p.action, target: p.target ?? null, payload: p.payload, evidence: [...p.evidence].sort() })),
