@@ -1,7 +1,7 @@
 // Usage: node test.mjs https://<worker>.workers.dev/
 // Simulates the grader with synthetic dossiers and real Ed25519 receipts. Node 18+.
-// NOTE: receipts are signed with the message format in signMsg() below, which matches the FIRST
-// candidate in receiptMessages() in src/index.js. Update both once the spec's signing format is known.
+// Receipts are signed per the spec: key-sorted compact JSON of
+// { profile, evaluationId, inputDigest, receipt: {dossierId, callId, action, accepted, proposalDigest, receiptId} }.
 import { generateKeyPairSync, sign, createHash } from 'node:crypto';
 
 const url = process.argv[2];
@@ -46,14 +46,15 @@ const KEYS = {
   quarantine_item: ['payload:artifactId,reasonCode', 'security_queue'],
   no_action: ['payload:reasonCode,referenceId', null],
 };
-// const signMsg = (evalId, r) => canon({ accepted: r.accepted, action: r.action, callId: r.callId, dossierId: r.dossierId, evaluationId: evalId, proposalDigest: r.proposalDigest, receiptId: r.receiptId });
-const signMsg = (evalId, r, inputDigest) => canon({ profile: PROFILE, evaluationId: evalId, inputDigest,
-  receipt: { dossierId: r.dossierId, callId: r.callId, action: r.action, accepted: r.accepted, proposalDigest: r.proposalDigest, receiptId: r.receiptId } });
-const receiptsFor = (evalId, proposals, acceptFirst = true) => proposals.map((p, i) => {
+const signMsg = (evalId, r, inputDigest) => canon({
+  profile: PROFILE, evaluationId: evalId, inputDigest,
+  receipt: { dossierId: r.dossierId, callId: r.callId, action: r.action, accepted: r.accepted, proposalDigest: r.proposalDigest, receiptId: r.receiptId },
+});
+const receiptsFor = (evalId, proposals, acceptFirst = true, inputDigest) => proposals.map((p, i) => {
   const r = { dossierId: p.dossierId, callId: p.callId, action: p.action, accepted: i === 0 ? acceptFirst : false,
     proposalDigest: sha(canon({ dossierId: p.dossierId, callId: p.callId, action: p.action, target: p.target ?? null, payload: p.payload, evidence: [...p.evidence].sort() })),
     receiptId: 'rcpt-' + rnd() + rnd() };
-  r.receiptSignature = sign(null, Buffer.from(signMsg(evalId, r)), privateKey).toString('base64');
+  r.receiptSignature = sign(null, Buffer.from(signMsg(evalId, r, inputDigest)), privateKey).toString('base64');
   return r;
 });
 const commitOf = (evalId, inputDigest, receipts) => ({ profile: PROFILE, operation: 'commit', evaluationId: evalId, inputDigest, receipts });
@@ -92,7 +93,7 @@ const p2 = await post(reqOf(e2));
 ok(p2.b?.proposals?.every((p, i) => p.callId === pr[i].callId && canon(p.payload) === canon(pr[i].payload)), `second evaluation: same callIds/payloads (${p2.ms} ms, should be fast)`);
 
 // ---- commit ----
-const good = receiptsFor(e1, pr);
+const good = receiptsFor(e1, pr, true, p1.b.inputDigest);
 const bad1 = structuredClone(good); bad1[0].receiptSignature = Buffer.alloc(64, 1).toString('base64');
 ok((await post(commitOf(e1, p1.b.inputDigest, bad1))).s >= 400, 'invalid signature rejected');
 const bad2 = structuredClone(good); bad2[1].accepted = true;
@@ -107,11 +108,11 @@ ok(c1.s === 200 && c1.b?.status === 'completed', 'valid commit completes');
 ok(c1.b?.outcomes?.[0]?.status === 'executed' && c1.b.outcomes.slice(1).every((o) => o.status === 'rejected'), 'executed only when accepted:true');
 const c1b = await post(commitOf(e1, p1.b.inputDigest, good));
 ok(c1b.text === c1.text, 'exact commit replay is byte-identical');
-const other = receiptsFor(e1, pr, false);
+const other = receiptsFor(e1, pr, false, p1.b.inputDigest);
 ok((await post(commitOf(e1, p1.b.inputDigest, other))).s === 409, 'changed commit after completion -> 409');
-const reuse = structuredClone(receiptsFor(e2, p2.b.proposals));
+const reuse = structuredClone(receiptsFor(e2, p2.b.proposals, true, p2.b.inputDigest));
 reuse[0].receiptId = good[0].receiptId;
-reuse[0].receiptSignature = sign(null, Buffer.from(signMsg(e2, reuse[0])), privateKey).toString('base64');
+reuse[0].receiptSignature = sign(null, Buffer.from(signMsg(e2, reuse[0], p2.b.inputDigest)), privateKey).toString('base64');
 ok((await post(commitOf(e2, p2.b.inputDigest, reuse))).s >= 400, 'receipt id reused across proposals rejected');
 
 console.log(fails ? `\n${fails} check(s) failed` : '\nAll local checks passed');
