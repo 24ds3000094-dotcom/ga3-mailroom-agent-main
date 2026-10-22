@@ -1,7 +1,7 @@
 // Mailroom action gate (ga5-mailroom-action-gate/v2) on Cloudflare Workers.
 // Layers: Worker (size bound, forward) -> Store Durable Object (validation, storage, lifecycle)
 //         -> decision layer (cache + batched model call + code-side safety builders).
-
+//  TESTING 
 const PROFILE = 'ga5-mailroom-action-gate/v2';
 const ACTIONS = ['create_draft', 'update_internal_record', 'send_approved_notice', 'request_confirmation', 'quarantine_item', 'no_action'];
 const NO_ACTION_REASONS = ['ALREADY_COMPLETED', 'DUPLICATE', 'INFORMATIONAL'];
